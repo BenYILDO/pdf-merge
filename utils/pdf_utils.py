@@ -6,7 +6,7 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4, LETTER, landscape, portrait
 from reportlab.lib.utils import ImageReader
 
-# ---- Boyut ve Yönlendirme sözlükleri ----
+# ---- Boyut sözlüğü ----
 PageSize = {"A4": A4, "Letter": LETTER}
 
 def mm_to_pt(mm: float) -> float:
@@ -25,12 +25,12 @@ def _resolve_page_size(page_size_name: str, orient_name: str, img_w: int, img_h:
     elif orient_name == "Yatay":
         w, h = landscape(base)
     else:  # Otomatik
-        # Görsel oranına göre karar ver
         if img_w >= img_h:
             w, h = landscape(base)
         else:
             w, h = portrait(base)
     return w, h
+
 def _prepare_image(pil_img: Image.Image) -> Image.Image:
     """PDF'e uygun hale getir: RGBA/LA ise arka planı beyaz yap ve RGB'ye çevir."""
     if pil_img.mode in ("RGBA", "LA"):
@@ -64,35 +64,30 @@ def build_pdf(
     bottom_pt = mm_to_pt(margins_mm.get("bottom", 10.0))
 
     buffer = io.BytesIO()
-    c = canvas.Canvas(buffer)  # Sayfa boyutunu sayfa bazlı setPageSize ile ayarlayacağız.
+    c = canvas.Canvas(buffer)  # Sayfa boyutunu her sayfa setPageSize ile ayarlıyoruz.
 
     for item in images:
-        # Görseli yükle + döndür
         pil = Image.open(io.BytesIO(item["data"]))
         rotation = int(item.get("rotation", 0)) % 360
         if rotation in (90, 180, 270):
-            # expand=True ile yeni boyutlara genişlet
             pil = pil.rotate(-rotation, expand=True, resample=Image.BICUBIC)
 
         pil = _prepare_image(pil)
         img_w_px, img_h_px = pil.size
 
-        # Yönlendirme belirle
+        # Yönlendirme
         orient_choice = item.get("orientation_override", "Varsayılan")
         if orient_choice == "Varsayılan":
-            orient_choice = default_orientation  # global
-        # Sayfa boyutunu belirle
-        page_w, page_h = _resolve_page_size(page_size, orient_choice, img_w_px, img_h_px)
+            orient_choice = default_orientation
 
-        # Sayfa boyutunu uygula
+        page_w, page_h = _resolve_page_size(page_size, orient_choice, img_w_px, img_h_px)
         c.setPageSize((page_w, page_h))
 
         # Çizilebilir alan
         avail_w = max(1.0, page_w - left_pt - right_pt)
         avail_h = max(1.0, page_h - top_pt - bottom_pt)
 
-        # Görseli orantılı şekilde alana sığdır
-        # PDF boyutları point, görsel piksel cinsinden; ölçeği oran üzerinden hesaplıyoruz.
+        # Ölçek
         scale = min(avail_w / img_w_px, avail_h / img_h_px)
         draw_w = img_w_px * scale
         draw_h = img_h_px * scale
@@ -100,11 +95,9 @@ def build_pdf(
         # Orta hizalama
         x = left_pt + (avail_w - draw_w) / 2.0
         y = bottom_pt + (avail_h - draw_h) / 2.0
-
-        # Reportlab ImageReader ile çiz
+        # Çiz
         img_reader = ImageReader(pil)
         c.drawImage(img_reader, x, y, width=draw_w, height=draw_h, preserveAspectRatio=True, mask='auto')
-
         c.showPage()
 
     c.save()
