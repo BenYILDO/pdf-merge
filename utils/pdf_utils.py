@@ -1,18 +1,18 @@
 import io
 from typing import List, Dict, Tuple
 
-from PIL import Image, ImageOps
+from PIL import Image
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4, LETTER, landscape, portrait
 from reportlab.lib.utils import ImageReader
 
-# ---- Boyut ve Yönlendirme tipleri ----
+# ---- Boyut ve Yönlendirme sözlükleri ----
 PageSize = {"A4": A4, "Letter": LETTER}
-Orientation = {"Dikey": portrait, "Yatay": landscape}
 
 def mm_to_pt(mm: float) -> float:
     """mm -> point (1 inç = 72 pt, 25.4 mm)"""
     return mm * 72.0 / 25.4
+
 def _resolve_page_size(page_size_name: str, orient_name: str, img_w: int, img_h: int) -> Tuple[float, float]:
     """
     page_size_name: "A4" | "Letter"
@@ -31,15 +31,15 @@ def _resolve_page_size(page_size_name: str, orient_name: str, img_w: int, img_h:
         else:
             w, h = portrait(base)
     return w, h
-
 def _prepare_image(pil_img: Image.Image) -> Image.Image:
-    """PDF'e uygun hale getir: RGBA ise arka planı beyaz yap ve RGB'ye çevir."""
+    """PDF'e uygun hale getir: RGBA/LA ise arka planı beyaz yap ve RGB'ye çevir."""
     if pil_img.mode in ("RGBA", "LA"):
         bg = Image.new("RGB", pil_img.size, (255, 255, 255))
         if pil_img.mode == "RGBA":
             bg.paste(pil_img, mask=pil_img.split()[3])
         else:
-            bg.paste(pil_img.convert("RGBA"), mask=pil_img.convert("RGBA").split()[3])
+            tmp = pil_img.convert("RGBA")
+            bg.paste(tmp, mask=tmp.split()[3])
         return bg
     elif pil_img.mode not in ("RGB", "L"):
         return pil_img.convert("RGB")
